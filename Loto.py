@@ -40,7 +40,7 @@ def process_archive_url(index, link):
     r = session.get(link, timeout=60)
     r.raise_for_status()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_zip:
-        tmp_zip.write(requests.get(link).content)
+        tmp_zip.write(requests.get(link, timeout=30).content)
         zip_path = tmp_zip.name
     with zipfile.ZipFile(zip_path) as z:
         file_name = z.namelist()[0]
@@ -66,17 +66,15 @@ def clean_year_index(row):
 def clean_harmonize_day(row):
     if row in days:
         return days[row]
-    else:
-        return row
+    return row
 
 def clean_harmonize_date(row):
     if len(row) == 8:
         return f"{row[6:]}/{row[4:6]}/{row[0:4]}"
-    else:
-        return row
+    return row
 
-def to_iso8601(date_str):
-    j, m, a = date_str.split("/")
+def to_iso(date_str):
+    j, m, a = date_str.split("/") # ISO 8601
     return f"{a}-{m}-{j}"
 
 def type_loto(file_name):
@@ -87,13 +85,15 @@ def type_loto(file_name):
         return "grand-loto"
     return "loto"
 
-def compute_stats(df, cols, types=types_loto, date_min=None, date_max=None):
+def compute_stats(df, cols, types=None, date_min=None, date_max=None):
+    if types is None:
+        types = types_loto
     tirages = df[df["type_loto"].isin(types)].melt(id_vars=["date_de_tirage"], value_vars=cols, value_name="numero")[["date_de_tirage", "numero"]]
     tirages = tirages[tirages["numero"] != 0]
     if date_min:
-        tirages = tirages[tirages["date_de_tirage"].apply(lambda d: to_iso8601(d) >= to_iso8601(date_min))]
+        tirages = tirages[tirages["date_de_tirage"].apply(lambda d: to_iso(d) >= to_iso(date_min))]
     if date_max:
-        tirages = tirages[tirages["date_de_tirage"].apply(lambda d: to_iso8601(d) <= to_iso8601(date_max))]
+        tirages = tirages[tirages["date_de_tirage"].apply(lambda d: to_iso(d) <= to_iso(date_max))]
     sorties = tirages.groupby("numero").agg(
         nombre_sorties=("numero", "count"),
         derniere_sortie=("date_de_tirage", lambda x: max(pd.to_datetime(x, dayfirst=True)))
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     try:
         links = find_archive_links()
     except Exception as e:
-            print(f"Erreur de récupération : {e}")
+        print(f"Erreur de récupération : {e}")
     dataframes = []
     for index, link in enumerate(links, start=1):
         try:
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     df["annee_numero_de_tirage"] = df["annee_numero_de_tirage"].astype(str).apply(clean_year_index)
     df["jour_de_tirage"] = df["jour_de_tirage"].astype(str).apply(clean_harmonize_day)
     df["date_de_tirage"] = df["date_de_tirage"].astype(str).apply(clean_harmonize_date)
-    df.sort_values(by="date_de_tirage", key=lambda col: col.apply(to_iso8601), ascending=False, inplace=True)
+    df.sort_values(by="date_de_tirage", key=lambda col: col.apply(to_iso), ascending=False, inplace=True)
     boule_cols = [col for col in df.columns if "boule_" in col or col == "numero_chance"]
     boule_premier_tirage_cols = [f"boule_{i}" for i in range(1,6)]
     boule_numero_chance_cols = ["numero_chance"]
@@ -145,12 +145,12 @@ if __name__ == "__main__":
     print(f"\n{df.head()}")
     print(f"\nNombre de tirages: {len(df)}")
     print(f"\nPériode: {df['date_de_tirage'].iloc[len(df)-1]} -> {df['date_de_tirage'].iloc[0]}")
-    print(f"\nStatistiques du premier tirage\n")
+    print("\nStatistiques du premier tirage\n")
     sorties_premier_tirage = compute_stats(df, boule_premier_tirage_cols, types = ["loto","super-loto"], date_min="14/07/2019").sort_values(by="numero", ascending=True)
     print(sorties_premier_tirage)
-    print(f"\nStatistiques du numéro chance\n")
+    print("\nStatistiques du numéro chance\n")
     sorties_numero_chance = compute_stats(df, boule_numero_chance_cols, types = ["loto","super-loto"], date_min="14/07/2019").sort_values(by="numero", ascending=True)
     print(sorties_numero_chance)
-    print(f"\nStatistiques du second tirage\n")
+    print("\nStatistiques du second tirage\n")
     sorties_second_tirage = compute_stats(df, boule_second_tirage_cols, types = ["loto","super-loto"], date_min="14/07/2019").sort_values(by="numero", ascending=True)
     print(sorties_second_tirage)
