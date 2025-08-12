@@ -1,12 +1,15 @@
-import os, sys
+import os
+import zipfile
+import tempfile
 import pandas as pd
-import bs4, requests
-import zipfile, tempfile
+import requests
+import bs4
 
+USER_AGENT = "python-loto-archiver/1.0 (+https://example.com)"
 FDJ_ZIP_URL = "https://www.fdj.fr/jeux-de-tirage/loto/historique"
 OUT_CSV = "loto_stats.csv"
 session = requests.Session()
-session.headers.update({"User-Agent": "python-loto-archiver/1.0 (+https://example.com)"})
+session.headers.update({"User-Agent": USER_AGENT})
 triplet_tirage = ["annee_numero_de_tirage", "jour_de_tirage", "date_de_tirage"]
 days = {"LU":"LUNDI","MA":"MARDI","ME":"MERCREDI","JE":"JEUDI","VE":"VENDREDI","SA":"SAMEDI","DI": "DIMANCHE"}
 types_loto = ["loto", "super-loto", "grand-loto"]
@@ -80,10 +83,9 @@ def type_loto(file_name):
     file = file_name.replace(".csv","")
     if "s" in file:
         return "super-loto"
-    elif "g" in file or "noel" in file:
+    if "g" in file or "noel" in file:
         return "grand-loto"
-    else:
-        return "loto"
+    return "loto"
 
 def compute_stats(df, cols, types=types_loto, date_min=None, date_max=None):
     tirages = df[df["type_loto"].isin(types)].melt(id_vars=["date_de_tirage"], value_vars=cols, value_name="numero")[["date_de_tirage", "numero"]]
